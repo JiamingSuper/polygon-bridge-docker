@@ -79,8 +79,8 @@ services:
         - node.hostname==hzhx-System-Product-Name
     # expose:
     #   - 5435
-    ports:
-      - 5435:5432
+    # ports:
+    #   - 5435:5432
     environment:
       - POSTGRES_USER=test_user
       - POSTGRES_PASSWORD=test_password
@@ -137,11 +137,11 @@ services:
       placement:
         constraints:
         - node.hostname==hzhx-System-Product-Name
-    ports:
-      - 50051:50051 # Prover
-      - 50052:50052 # MockProver
-      - 50061:50061 # MT
-      - 50071:50071 # Executor
+    # ports:
+    #   - 50051:50051 # Prover
+    #   - 50052:50052 # MockProver
+    #   - 50061:50061 # MT
+    #   - 50071:50071 # Executor
     configs:
       - source: config_prover_json
         target: /usr/src/app/config.json

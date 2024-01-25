@@ -27,35 +27,35 @@ fi
 start_num=0
 # 如果没有传参数或者为1就直接开启单个的
 if [ "$#" -eq 0 ] || [ "$1" -eq 1 ]; then
-    start_num=1
+  start_num=1
+else
+  start_num=$1
 fi
-start_num=$1
 
 # 当前节点数量
 node_count=$(docker node ls --format "{{.ID}}" | wc -l)
 
 # 准备根据传入的开启节点数量要求准备配置文件
-if [ $# -gt 0 ]; then
-  for ((i=1; i<=start_num; i++)); do
-    source_folder="config_base"
-    destination_folder="config_use/config_n$i"
-    mkdir -p "$destination_folder"
-    cp -r "$source_folder"/* "$destination_folder/"
-    zkevm_node_toml = "$destination_folder/node/config.zkevm.node.toml"
-    prover_json = "$destination_folder/prover/config.prover.json"
-    local_toml = "$destination_folder/config.local.toml"
-    # 对于第一个节点需要是可信定序器的配置，其他节点为非可信定序器
-    if [ $i -ne 1 ]; then
-      sed -i '' "s/IsTrustedSequencer = true/IsTrustedSequencer = false/g" "$zkevm_node_toml"
-      sed -i '' "/zkevm-mock-l1-network\|TrustedSequencerURL/!s/bridge1/bridge$i/g}" "$zkevm_node_toml"
-      sed -i '' "s/bridge1/bridge$i/g" "$prover_json"
-      sed -i '' "/zkevm-mock-l1-network/! s/bridge1/bridge$i/g" "$local_toml"
-    fi
-  done
-fi
+for ((i=1; i<=start_num; i++)); do
+  source_folder="config_base"
+  destination_folder="config_use/config_n$i"
+  mkdir -p "$destination_folder"
+  cp -r "$source_folder"/* "$destination_folder/"
+  zkevm_node_toml="$destination_folder/node/config.zkevm.node.toml"
+  prover_json="$destination_folder/prover/config.prover.json"
+  local_toml="$destination_folder/config.local.toml"
+  # 对于第一个节点需要是可信定序器的配置，其他节点为非可信定序器
+  if [ $i -ne 1 ]; then
+    sed -i "s/IsTrustedSequencer = true/IsTrustedSequencer = false/g" "$zkevm_node_toml"
+    sed -i "/zkevm-mock-l1-network\|TrustedSequencerURL/! { s/bridge1/bridge$i/g }" "$zkevm_node_toml"
+    sed -i "s/bridge1/bridge$i/g" "$prover_json"
+    sed -i "/zkevm-mock-l1-network/! s/bridge1/bridge$i/g" "$local_toml"
+    # sed -i "/zkevm-mock-l1-network\|zkevm-node/! { s/bridge1/bridge$i/g }" "$local_toml"
+  fi
+done
 
 # 判断是否足够开启需要的节点数量
-if ! [[ $1 =~ ^[0-9]+$ ]] || ((node_count < start_num)); then
+if [ "$node_count" -lt "$start_num" ]; then
   echo "Error: There aren't enough machines or invalid input."
   echo "Please use the Docker swarm command to join enough machines."
   exit 1
@@ -66,7 +66,7 @@ nodes_host=($(docker node ls --format "{{.Hostname}}"))
 count=0
 for node in "${nodes_host[@]}"; do
   # 只准备设定的数量文件
-  if [ $count -ge start_num]; then
+  if [ $count -ge $start_num ]; then
     break
   fi
   ((count++))
@@ -75,20 +75,30 @@ for node in "${nodes_host[@]}"; do
     source_file="docker-swarm.yml"
     destination_file="docker-compose/bridge$count.yml"
     cp "$source_file" "$destination_file"
-    sed -i '' "s/config_base/config_use\/config_n$count/g" "$destination_file"
-    sed -i '' "s/hzhx-System-Product-Name/$node/g" "$destination_file"
+    sed -i "s/.\/config_base/..\/config_use\/config_n$count/g" "$destination_file"
+    sed -i "s/hzhx-System-Product-Name/$node/g" "$destination_file"
     docker stack deploy -c "$destination_file" bridge$count
     echo "=================================="
     echo "L1 RPC: $node:8545"
     echo "L1 WS:  $node:8546"
+  else
+    source_file="docker-swarm-false.yml"
+    destination_file="docker-compose/bridge$count.yml"
+    cp "$source_file" "$destination_file"
+    sed -i "s/.\/config_base/..\/config_use\/config_n$count/g" "$destination_file"
+    sed -i "s/hzhx-System-Product-Name/$node/g" "$destination_file"
+    sed -i "s/bridge1/bridge$count/g" "$destination_file"
+    node_port1=$((count + 8123 - 1))
+    node_port2=$((count + 61090 - 1))
+    sed -i "s/8123:8123/$node_port1:8123/g" "$destination_file"
+    sed -i "s/61090:61090/$node_port2:61090/g" "$destination_file"
+    bridge_port1=$((count + 8080 - 1))
+    bridge_port2=$((count + 9090 - 1))
+    sed -i "s/8080:8080/$bridge_port1:8080/g" "$destination_file"
+    sed -i "s/9090:9090/$bridge_port2:9090/g" "$destination_file"
+    docker stack deploy -c "$destination_file" bridge$count
+    echo "=================================="
+    echo "L2_Node$count RPC:    $node:$node_port1"
+    echo "L2_Node$count Bridge: $node:$bridge_port1"
   fi
-  source_file="docker-swarm-false.yml"
-  destination_file="docker-compose/bridge$count.yml"
-  cp "$source_file" "$destination_file"
-  sed -i '' "s/config_base/config_use\/config_n$count/g" "$destination_file"
-  sed -i '' "s/hzhx-System-Product-Name/$node/g" "$destination_file"
-  docker stack deploy -c "$destination_file" bridge$count
-  echo "=================================="
-  echo "L2_Node$count RPC:    $node:8123"
-  echo "L2_Node$count Bridge: $node:8080"
 done
