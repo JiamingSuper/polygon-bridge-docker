@@ -24,7 +24,7 @@ else
   exit 1
 fi
 
-# 如果没有传参数或者为1就直接开启单个的
+# 单个节点
 if [ "$#" -eq 0 ] || [ "$1" -eq 1 ]; then
     docker stack deploy -c docker-swarm.yml bridge1
 fi
