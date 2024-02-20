@@ -26,6 +26,12 @@ fi
 
 # 单个节点
 if [ "$#" -eq 0 ] || [ "$1" -eq 1 ]; then
+    # 获取当前的主机名
+    hostname=$(uname -n)
+
+    # 替换YAML文件中的文本
+    sed -i "s/hzhx-System-Product-Name/$hostname/g" docker-swarm.yml
+
     docker stack deploy -c docker-swarm.yml bridge1
 fi
 
